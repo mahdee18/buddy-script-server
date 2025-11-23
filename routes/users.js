@@ -1,84 +1,83 @@
 const express = require('express');
 const { ObjectId } = require('mongodb');
+const bcrypt = require('bcryptjs');
+const generateToken = require('../utils/generateToken');
 const router = express.Router();
 
+const createUserRoutes = (usersCollection) => {
 
-router.post('/login', async (req, res) => {
-  const db = req.app.locals.db;
-  const { email, password } = req.body;
-  
-  console.log(`Login attempt for email: ${email}`); });
+  // @desc    Register a new user
+  router.post('/register', async (req, res) => {
+    const { firstName, lastName, email, password } = req.body;
 
-// Register a new user 
-router.post('/register', async (req, res) => {
-  const db = req.app.locals.db;
-  const usersCollection = db.collection('users');
-  const user = req.body;
-
-  // 1. Find duplicate email
-  const query = { email: user.email };
-  const existingUser = await usersCollection.findOne(query);
-
-  if (existingUser) {
-    return res.status(400).send({ message: "User with this email already exists." });
-  }
-  
-  const result = await usersCollection.insertOne({
-      ...user,
-      createdAt: new Date()
-  });
-
-  res.status(201).send(result);
-});
-
-router.post('/login', async (req, res) => {
-    const db = req.app.locals.db;
-    const usersCollection = db.collection('users');
-    const { email, password } = req.body;
-
-    const query = { email: email };
-    const user = await usersCollection.findOne(query);
-
-    if (!user) {
-        return res.status(404).send({ message: "User not found." });
-    }
-
-    if (user.password !== password) {
-        return res.status(401).send({ message: "Incorrect password." });
-    }
-
-    const { password: userPassword, ...userWithoutPassword } = user;
-    res.status(200).send(userWithoutPassword);
-});
-
-
-router.get('/', async (req, res) => {
-    const db = req.app.locals.db;
-    const usersCollection = db.collection('users');
-
-    const result = await usersCollection.find().toArray();
-    res.send(result);
-});
-
-
-router.get('/:id', async (req, res) => {
-    const db = req.app.locals.db;
-    const usersCollection = db.collection('users');
-    const id = req.params.id;
-
-    if (!ObjectId.isValid(id)) {
-        return res.status(400).send({ message: 'Invalid user ID format.' });
-    }
-
-    const query = { _id: new ObjectId(id) };
-    const result = await usersCollection.findOne(query);
-
-    if (!result) {
-        return res.status(404).send({ message: 'User not found.' });
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: 'Please provide all required fields.' });
     }
     
-    res.send(result);
-});
+    try {
+      const existingUser = await usersCollection.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this email already exists." });
+      }
 
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
 
-module.exports = router;
+      const newUser = {
+        firstName,
+        lastName,
+        email,
+        password: hashedPassword,
+        createdAt: new Date(),
+      };
+
+      const result = await usersCollection.insertOne(newUser);
+      
+      if (result.insertedId) {
+        res.status(201).json({
+          _id: result.insertedId,
+          firstName: newUser.firstName,
+          lastName: newUser.lastName,
+          email: newUser.email,
+          token: generateToken(result.insertedId),
+        });
+      } else {
+        throw new Error('User creation failed.');
+      }
+    } catch (error) {
+      console.error("Registration Error:", error);
+      res.status(500).json({ message: "Server error during registration." });
+    }
+  });
+
+  //POST /api/users/login
+  router.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please provide email and password.' });
+    }
+
+    try {
+      const user = await usersCollection.findOne({ email });
+
+      if (user && (await bcrypt.compare(password, user.password))) {
+        res.status(200).json({
+          _id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          token: generateToken(user._id),
+        });
+      } else {
+        res.status(401).json({ message: 'Invalid email or password' });
+      }
+    } catch (error) {
+      console.error("Login Error:", error);
+      res.status(500).json({ message: "Server error during login." });
+    }
+  });
+  return router;
+};
+
+module.exports = createUserRoutes;

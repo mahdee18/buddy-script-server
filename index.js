@@ -4,8 +4,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 
-
-const userRoutes = require('./routes/users'); 
+// Import the function that creates our user routes
+const createUserRoutes = require('./routes/users');
 
 // Load environment variables
 dotenv.config();
@@ -17,9 +17,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- ROUTES ---
-app.use('/api/users', userRoutes);
-
 // Test Route
 app.get("/", (req, res) => {
   res.send("Welcome to the Buddy Script API!");
@@ -28,34 +25,43 @@ app.get("/", (req, res) => {
 // DB Connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ftqixdj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
-let client;
+// Create a new MongoClient
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
 
-async function connectDB() {
+// Main function to connect to DB and start the server
+async function startServer() {
   try {
-    client = new MongoClient(uri, {
-      serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-      },
-    });
-
-    // await client.connect();
-
-    app.locals.db = client.db('buddyScriptDB'); 
-
+    // 1. Connect the client to the server
+    await client.connect();
     console.log("MongoDB connected successfully!");
 
-  } catch (error)
-   {
-    console.error("MongoDB connection failed:", error);
-    process.exit(1);
+    // 2. Get a handle on your database and the 'users' collection
+    const database = client.db('buddyScriptDB'); // Replace 'buddyScriptDB' with your DB name if different
+    const usersCollection = database.collection('users');
+
+    // 3. Create the user routes by passing the collection to the factory function
+    const userRoutes = createUserRoutes(usersCollection);
+
+    // 4. Tell the app to use these routes for any path starting with /api/users
+    app.use('/api/users', userRoutes);
+
+    // 5. Start the Express server only after the database connection is established
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+
+  } catch (error) {
+    console.error("Failed to connect to the database or start the server.", error);
+    process.exit(1); // Exit the process with an error code
   }
 }
 
-connectDB().then(() => {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
-  });
-});
+// Run the main function
+startServer();
