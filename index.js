@@ -20,7 +20,7 @@ const client = new MongoClient(uri, {
 
 async function startServer() {
   try {
-    await client.connect();
+    // await client.connect();
     const database = client.db('buddyScriptDB');
     console.log("MongoDB connected successfully!");
 
