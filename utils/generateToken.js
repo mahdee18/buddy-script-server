@@ -1,9 +1,9 @@
-const jwt = require('jsonwebtoken');
+const jwt = inport('jsonwebtoken');
 
+/** Generates a JSON Web Token for a given user ID. */
 const generateToken = (id) => {
-
     return jwt.sign({ id }, process.env.JWT_SECRET, {
-        expiresIn: '30d', 
+        expiresIn: process.env.JWT_EXPIRES_IN || '30d',
     });
 };
 
