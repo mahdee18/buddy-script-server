@@ -1,10 +1,9 @@
 const asyncHandler = require('express-async-handler');
-// const User = require('../models/userModel');
+const User = require('../models/userModel');
 const generateToken = require('../utils/generateToken');
+const userModel = require('../models/userModel');
 
-// @desc    Register a new user
-// @route   POST /api/users/register
-// @access  Public
+// Register a new user
 const registerUser = asyncHandler(async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
@@ -15,13 +14,13 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     // Check if user exists
-    const userExists = await User.findOne({ email });
+    const userExists = await userModel.findOne({ email });
     if (userExists) {
         res.status(400);
         throw new Error('User already exists');
     }
 
-    // Create user (password is hashed automatically by the pre-save hook in the model)
+    // Create user 
     const user = await User.create({
         firstName,
         lastName,
@@ -43,16 +42,14 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 });
 
-// @desc    Authenticate a user
-// @route   POST /api/users/login
-// @access  Public
+// Authenticate a user
 const loginUser = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
     // Check for user by email
     const user = await User.findOne({ email });
 
-    // Check password (using the method we created in the model)
+    // Check password
     if (user && (await user.matchPassword(password))) {
         res.json({
             _id: user.id,
@@ -67,11 +64,8 @@ const loginUser = asyncHandler(async (req, res) => {
     }
 });
 
-// @desc    Get user data
-// @route   GET /api/users/me
-// @access  Private
+// Get user data
 const getMe = asyncHandler(async (req, res) => {
-    // The user is already available from the `protect` middleware
     res.status(200).json(req.user);
 });
 

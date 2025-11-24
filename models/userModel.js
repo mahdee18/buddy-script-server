@@ -21,15 +21,18 @@ const userSchema = mongoose.Schema(
             type: String,
             required: [true, 'Please add a password'],
         },
+        profilePicture: {
+            type: String,
+            default: '/default-avatar.png' 
+        }
     },
     {
-        timestamps: true, 
+        timestamps: true,
     }
 );
 
-// Encrypt password using bcrypt before saving the document
+// This function runs automatically BEFORE a user document is saved
 userSchema.pre('save', async function (next) {
-    // Only run this function if password was modified (or is new)
     if (!this.isModified('password')) {
         return next();
     }
@@ -38,7 +41,7 @@ userSchema.pre('save', async function (next) {
     next();
 });
 
-// Match user entered password to hashed password in the database
+// This adds a custom method to the User model to compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
