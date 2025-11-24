@@ -39,20 +39,25 @@ const postSchema = new Schema(
     { timestamps: true }
 );
 
-// This ensures that when we fetch a post, the author details are populated
-const autoPopulateAuthor = function (next) {
+// --- THIS IS THE CORRECTED FUNCTION ---.
+const autoPopulateDetails = function () {
     this.populate('author', 'firstName lastName profilePicture');
     this.populate({
         path: 'comments',
-        populate: {
-            path: 'author',
-            select: 'firstName lastName profilePicture',
-        },
+        populate: [
+            {
+                path: 'author',
+                select: 'firstName lastName profilePicture',
+            },
+            {
+                path: 'replies.author',
+                select: 'firstName lastName profilePicture',
+            }
+        ],
     });
-    next();
 };
 
-postSchema.pre('findOne', autoPopulateAuthor);
-postSchema.pre('find', autoPopulateAuthor);
+postSchema.pre('findOne', autoPopulateDetails);
+postSchema.pre('find', autoPopulateDetails);
 
 module.exports = mongoose.model('Post', postSchema);

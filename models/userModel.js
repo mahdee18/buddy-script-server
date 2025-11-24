@@ -27,7 +27,7 @@ const userSchema = mongoose.Schema(
         }
     },
     {
-        timestamps: true,
+        timestamps: true, 
     }
 );
 
@@ -41,7 +41,7 @@ userSchema.pre('save', async function (next) {
     next();
 });
 
-// This adds a custom method to the User model to compare passwords
+// This adds a custom method to any user document to compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
 };
