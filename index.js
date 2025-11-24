@@ -1,67 +1,65 @@
-// Dependencies
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const bodyParser = require('body-parser'); 
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const path = require('path');
 
-// Import the function that creates our user routes
 const createUserRoutes = require('./routes/users');
+const createPostRoutes = require('./routes/posts');
 
-// Load environment variables
 dotenv.config();
-
-// Initialize Express app
 const app = express();
 
-// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Test Route
-app.get("/", (req, res) => {
-  res.send("Welcome to the Buddy Script API!");
+app.use((req, res, next) => {
+  console.log('--- New Request ---');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Method:', req.method);
+  console.log('URL:', req.originalUrl);
+  console.log('Request Body:', req.body); 
+  console.log('-------------------');
+  next(); 
 });
 
-// DB Connection URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ftqixdj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-
-// Create a new MongoClient
 const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
+  serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true },
 });
 
-// Main function to connect to DB and start the server
 async function startServer() {
   try {
-    // 1. Connect the client to the server
     await client.connect();
+    const database = client.db('buddyScriptDB');
     console.log("MongoDB connected successfully!");
 
-    // 2. Get a handle on your database and the 'users' collection
-    const database = client.db('buddyScriptDB'); // Replace 'buddyScriptDB' with your DB name if different
     const usersCollection = database.collection('users');
+    const postsCollection = database.collection('posts');
 
-    // 3. Create the user routes by passing the collection to the factory function
+    // --- API ROUTES ---
     const userRoutes = createUserRoutes(usersCollection);
+    const postRoutes = createPostRoutes(postsCollection, usersCollection);
 
-    // 4. Tell the app to use these routes for any path starting with /api/users
     app.use('/api/users', userRoutes);
+    app.use('/api/posts', postRoutes);
 
-    // 5. Start the Express server only after the database connection is established
+    app.get("/", (req, res) => {
+      res.send("Welcome to the Buddy Script API!");
+    });
+    
+    // --- START LISTENING ---
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+      console.log(`Server is running on http://localhost:${PORT}`);
     });
 
   } catch (error) {
     console.error("Failed to connect to the database or start the server.", error);
-    process.exit(1); // Exit the process with an error code
+    process.exit(1);
   }
 }
 
-// Run the main function
 startServer();

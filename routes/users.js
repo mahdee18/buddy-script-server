@@ -2,11 +2,12 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 const generateToken = require('../utils/generateToken');
+const { protect } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 const createUserRoutes = (usersCollection) => {
 
-  // @desc    Register a new user
+  // --- PUBLIC ROUTES ---
   router.post('/register', async (req, res) => {
     const { firstName, lastName, email, password } = req.body;
 
@@ -23,14 +24,7 @@ const createUserRoutes = (usersCollection) => {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-      const newUser = {
-        firstName,
-        lastName,
-        email,
-        password: hashedPassword,
-        createdAt: new Date(),
-      };
-
+      const newUser = { firstName, lastName, email, password: hashedPassword, createdAt: new Date() };
       const result = await usersCollection.insertOne(newUser);
       
       if (result.insertedId) {
@@ -41,8 +35,8 @@ const createUserRoutes = (usersCollection) => {
           email: newUser.email,
           token: generateToken(result.insertedId),
         });
-      } else {
-        throw new Error('User creation failed.');
+      } else { 
+        throw new Error('User creation failed.'); 
       }
     } catch (error) {
       console.error("Registration Error:", error);
@@ -50,7 +44,6 @@ const createUserRoutes = (usersCollection) => {
     }
   });
 
-  //POST /api/users/login
   router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
@@ -77,6 +70,17 @@ const createUserRoutes = (usersCollection) => {
       res.status(500).json({ message: "Server error during login." });
     }
   });
+
+
+  // --- PROTECTED ROUTES ---
+  router.get('/me', protect(usersCollection), (req, res) => {
+    if (req.user) {
+      res.status(200).json(req.user);
+    } else {
+       res.status(404).json({ message: 'User not found' });
+    }
+  });
+
   return router;
 };
 
