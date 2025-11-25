@@ -93,7 +93,6 @@ function createPostRoutes(postsCollection, usersCollection) {
             const isLiked = post.likes.some(likeId => likeId.equals(req.user._id));
             const updateOperation = isLiked ? { $pull: { likes: req.user._id } } : { $addToSet: { likes: req.user._id } };
             await postsCollection.updateOne({ _id: new ObjectId(req.params.id) }, updateOperation);
-            // Return the full updated post for instant UI update
             const updatedPost = await postsCollection.findOne({ _id: new ObjectId(req.params.id) });
             res.status(200).json(updatedPost);
         } catch (error) { res.status(500).json({ message: 'Server error while liking post.' }); }
@@ -105,7 +104,6 @@ function createPostRoutes(postsCollection, usersCollection) {
             if (!content) return res.status(400).json({ message: 'Comment content cannot be empty' });
             const newComment = { _id: new ObjectId(), authorId: req.user._id, content, likes: [], replies: [], createdAt: new Date() };
             await postsCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $push: { comments: { $each: [newComment], $position: 0 } } });
-            // Return the full updated post
             const updatedPost = await postsCollection.findOne({ _id: new ObjectId(req.params.id) });
             res.status(201).json(updatedPost);
         } catch (error) { res.status(500).json({ message: 'Server error while adding comment.' }); }
@@ -137,8 +135,67 @@ function createPostRoutes(postsCollection, usersCollection) {
         } catch (error) { res.status(500).json({ message: 'Server error while adding reply.' }); }
     });
 
-    // ... (other routes like reply liking and getting likers would go here)
-    
+    router.put('/:postId/comments/:commentId/replies/:replyId/like', protect(usersCollection), async (req, res) => {
+        try {
+            const { postId, commentId, replyId } = req.params;
+            const post = await postsCollection.findOne({ _id: new ObjectId(postId), 'comments._id': new ObjectId(commentId), 'comments.replies._id': new ObjectId(replyId) });
+            if (!post) return res.status(404).json({ message: 'Could not find the specified reply.' });
+            const comment = post.comments.find(c => c._id.equals(new ObjectId(commentId)));
+            const reply = comment.replies.find(r => r._id.equals(new ObjectId(replyId)));
+            const isLiked = reply.likes.some(likeId => likeId.equals(req.user._id));
+            const updateOperation = isLiked ? { $pull: { 'comments.$[c].replies.$[r].likes': req.user._id } } : { $addToSet: { 'comments.$[c].replies.$[r].likes': req.user._id } };
+            await postsCollection.updateOne({ _id: new ObjectId(postId) }, updateOperation, { arrayFilters: [{ 'c._id': new ObjectId(commentId) }, { 'r._id': new ObjectId(replyId) }] });
+            res.status(200).json({ message: 'Reply like status updated.' });
+        } catch (error) { res.status(500).json({ message: 'Server error while liking reply.' }); }
+    });
+
+    // ==========================================================
+    // GET LIKERS (CORRECTED AND FINAL VERSION)
+    // ==========================================================
+    router.get('/:postId/likers', protect(usersCollection), async (req, res) => {
+        try {
+            const { postId } = req.params;
+            const { commentId, replyId } = req.query;
+            let userIds = [];
+
+            const post = await postsCollection.findOne({ _id: new ObjectId(postId) });
+            if (!post) {
+                return res.status(404).json({ message: 'Post not found' });
+            }
+
+            if (replyId && commentId) {
+                const comment = post.comments.find(c => c._id.equals(new ObjectId(commentId)));
+                const reply = comment?.replies.find(r => r._id.equals(new ObjectId(replyId)));
+                if (reply) userIds = reply.likes;
+            } else if (commentId) {
+                const comment = post.comments.find(c => c._id.equals(new ObjectId(commentId)));
+                if (comment) userIds = comment.likes;
+            } else {
+                userIds = post.likes;
+            }
+
+            // Ensure every ID is a valid ObjectId before querying to prevent crashes.
+            const validObjectIds = userIds
+                .filter(id => ObjectId.isValid(id))
+                .map(id => new ObjectId(id));
+
+            if (validObjectIds.length === 0) {
+                return res.status(200).json([]); // Return empty if no valid likers
+            }
+
+            const likers = await usersCollection.find(
+                { _id: { $in: validObjectIds } }, // Use the sanitized array
+                { projection: { firstName: 1, lastName: 1, profilePicture: 1 } }
+            ).toArray();
+            
+            res.status(200).json(likers);
+
+        } catch (error) {
+            console.error("!!! ERROR FETCHING LIKERS:", error);
+            res.status(500).json({ message: 'Server error while fetching likers.' });
+        }
+    });
+
     return router;
 }
 
